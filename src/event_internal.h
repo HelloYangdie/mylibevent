@@ -12,6 +12,8 @@
 
 #include "include/event2/event_struct.h"
 #include "evsignal_internal.h"
+#include "time_internal.h"
+#include "util_internal.h"
 
 #define event_io_map event_signal_map
 
@@ -19,6 +21,30 @@ struct event_signal_map {
 	void** entries;
 	int nentries;
 };
+
+struct event_config_entry {
+	struct event_config_entry* tqe_next;
+	struct event_config_entry** tqe_prev;
+
+	const char* avoid_method;
+};
+
+/** Internal structure: describes the configuration we want for an event_base
+ * that we're about to allocate. */
+struct event_config {
+	struct event_configq {
+		struct event_config_entry* tqh_first;
+		struct event_config_entry** tqh_last;
+	} entries;
+
+	int n_cpus_hint;
+	struct timeval max_dispatch_interval;
+	int max_dispathc_callbacks;
+	int limit_callbacks_after_prio;
+	enum event_method_feature require_features;
+	enum event_base_config_flag flags;
+};
+
 
 /* List of 'changes' since the last call to eventop.dispatch.  Only maintained
  * if the backend is using changesets. */
@@ -125,6 +151,88 @@ struct event_base {
 
 	struct timeval tv_cache;
 
+	struct evutil_monotonic_timer monotonic_timer;
+
+	/** Difference between internal time (maybe from clock_gettime) and gettimeofday. */
+	struct timeval tv_clock_diff;
+
+	/** Second in which we last updated tv_clock_diff, in monotonic time. */
+	time_t last_updated_clock_diff;
+
+	/** The thread id currently running the event_loop for this base */
+	unsigned long th_owner_id;
+
+	void* th_base_lock;
+	/** A condition that gets signalled when we're done processing an
+	 * event with waiters on it. */
+	void* current_event_cond;
+	/** Number of threads blocking on current_event_cond. */
+	int current_event_waiters;
+	/** The event whose callback is executing right now */
+	struct event_callback* current_event;
+
+	/** Flags that this base was configured with */
+	enum event_base_config_flag flags;
+
+	struct timeval max_dispatch_time;
+	int max_dispatch_callbacks;
+	int limit_callbacks_after_prio;
+	/** True if the base already has a pending notify, and we don't need
+	 * to add any more. */
+	int is_notify_pending;
+	/** A socketpair used by some th_notify functions to wake up the main
+	 * thread. */
+	evutil_socket_t th_notify_fd[2];
+	/** An event used by some th_notify functions to wake up the main
+	 * thread. */
+	struct event th_notify;
+	/** A function used to wake up the main thread from another thread. */
+	int (*th_notify_fn)(struct event_base* base);
+
+	struct evutil_weakrand_state weakrand_seed;
+
+	struct once_event_list {
+		struct event_once* lh_first;
+	} once_events;
 };
 
 #endif /* SRC_EVENT_INTERNAL_H_ */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -8,13 +8,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <limits.h>
 
 #include "mm_internal.h"
 #include "event_internal.h"
+#include "include/event2/event.h"
+#include "evthread_internal.h"
+
+#define EVENT_BASE_ASSERT_LOCKED(base) EVLOCK_ASSERT_LOCKED((base)->th_base_lock)
 
 static void *(*mm_malloc_fn_)(size_t sz) = NULL;
 static void *(*mm_realloc_fn_)(void *p, size_t sz) = NULL;
 static void (*mm_free_fn_)(void *p) = NULL;
+
+static int event_debug_mode_too_late = 1;
 
 void *event_mm_malloc_(size_t sz)
 {
@@ -85,3 +92,106 @@ void event_mm_free_(void *ptr)
 	else
 		free(ptr);
 }
+
+static int gettime(struct event_base* base, struct timeval* tp)
+{
+	EVENT_BASE_ASSERT_LOCKED(base);
+
+	if (base->tv_cache.tv_sec) {
+		*tp = base->tv_cache;
+		return 0;
+	}
+
+
+}
+
+struct event_base* event_base_new(void)
+{
+	struct event_base* base = NULL;
+	struct event_config* cfg = event_config_new();
+	if (cfg) {
+		base =
+	}
+}
+
+struct event_base* event_base_new_with_config(const struct event_config* cfg)
+{
+	int i;
+	struct event_base* base;
+	int should_check_environment;
+	event_debug_mode_too_late = 1;
+
+	if ((base = mm_calloc(1, sizeof(struct event_base))) == NULL) {
+		event_log("%s: calloc", __FUNCTION__);
+		return NULL;
+	}
+
+	if (cfg) base->flags = cfg->flags;
+
+	should_check_environment = !(cfg && (cfg->flags & EVENT_BASE_FLAG_IGNORE_ENV));
+	{
+		struct timeval tmp;
+		int precise_time = cfg && (cfg->flags & EVENT_BASE_FLAG_PRECISE_TIMER);
+		int flags;
+		if (should_check_environment && !precise_time) {
+			precise_time = (evutil_getenv_("EVENT_PRECISE_TIMER") != NULL);
+			base->flags |= EVENT_BASE_FLAG_PRECISE_TIMER;
+		}
+		flags = precise_time ? EV_MONOT_PRECISE : 0;
+		evutil_configure_monotonic_time_(&base->monotonic_timer, flags);
+	}
+}
+
+struct event_config* event_config_new(void)
+{
+	struct event_config* cfg = mm_calloc(1, sizeof(struct event_config));
+	if (cfg == NULL) {
+		return NULL;
+	}
+
+	cfg->entries.tqh_first = NULL;
+	cfg->entries.tqh_last = &(cfg->entries.tqh_first);
+	cfg->max_dispatch_interval = INT_MAX;
+	cfg->limit_callbacks_after_prio = 1;
+
+	return cfg;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
