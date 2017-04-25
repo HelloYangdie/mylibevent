@@ -9,6 +9,7 @@
 #define INCLUDE_EVENT2_UTIL_H_
 
 #include <stdint.h>
+#include <sys/time.h>
 
 #define EVENT_SIZEOF_SIZE_T  sizeof(void*)
 
@@ -35,5 +36,50 @@
 #define EV_MONOT_FALLBACK 2
 
 #define evutil_gettimeofday(tv, tz) gettimeofday((tv), (tz))
+#define evutil_timeradd(tvp, uvp, vvp) timeradd((tvp),(uvp),(vvp))
+#define evutil_timersub(tvp, uvp, vvp) timersub((tvp),(uvp),(vvp))
+
+/** Do platform-specific operations as needed to close a socket upon a
+    successful execution of one of the exec*() functions.
+
+    @param sock The socket to be closed
+    @return 0 on success, -1 on failure
+ */
+int evutil_make_socket_closeonexec(evutil_socket_t sock);
+
+int evutil_make_socket_nonblocking(evutil_socket_t sock);
+
 
 #endif /* INCLUDE_EVENT2_UTIL_H_ */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

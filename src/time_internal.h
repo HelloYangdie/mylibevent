@@ -19,4 +19,7 @@ struct evutil_monotonic_timer {
 int evutil_configure_monotonic_time_(struct evutil_monotonic_timer *mt, int flags);
 int evutil_gettime_monotonic_(struct evutil_monotonic_timer *mt, struct timeval *tv);
 
+int evutil_make_internal_pipe_(evutil_socket_t fd[2]);
+evutil_socket_t evutil_eventfd_(unsigned initval, int flags);
+
 #endif /* SRC_TIME_INTERNAL_H_ */

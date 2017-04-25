@@ -14,6 +14,28 @@
 #include "evsignal_internal.h"
 #include "time_internal.h"
 #include "util_internal.h"
+#include "minheap_internal.h"
+
+/** @name Event closure codes
+    Possible values for evcb_closure in struct event_callback
+**/
+
+/** A regular event. Uses the evcb_callback callback */
+#define EV_CLOSURE_EVENT 0
+/** A signal event. Uses the evcb_callback callback */
+#define EV_CLOSURE_EVENT_SIGNAL 1
+/** A persistent non-signal event. Uses the evcb_callback callback */
+#define EV_CLOSURE_EVENT_PERSIST 2
+/** A simple callback. Uses the evcb_selfcb callback. */
+#define EV_CLOSURE_CB_SELF 3
+/** A finalizing callback. Uses the evcb_cbfinalize callback. */
+#define EV_CLOSURE_CB_FINALIZE 4
+/** A finalizing event. Uses the evcb_evfinalize callback. */
+#define EV_CLOSURE_EVENT_FINALIZE 5
+/** A finalizing event that should get freed after. Uses the evcb_evfinalize
+ * callback. */
+#define EV_CLOSURE_EVENT_FINALIZE_FREE 6
+
 
 #define event_io_map event_signal_map
 
@@ -44,7 +66,6 @@ struct event_config {
 	enum event_method_feature require_features;
 	enum event_base_config_flag flags;
 };
-
 
 /* List of 'changes' since the last call to eventop.dispatch.  Only maintained
  * if the backend is using changesets. */

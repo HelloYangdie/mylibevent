@@ -20,6 +20,13 @@ struct evsig_info {
 	int ev_n_signals_added;
 
 	struct sigaction** sh_old;
+	int sh_old_max;
 };
+
+int evsig_init_(struct event_base *);
+void evsig_dealloc_(struct event_base *);
+
+void evsig_set_base_(struct event_base *base);
+void evsig_free_globals_(void);
 
 #endif /* SRC_EVSIGNAL_INTERNAL_H_ */

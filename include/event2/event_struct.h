@@ -14,6 +14,15 @@
 #include "include/event2/util.h"
 #include "include/event2/event.h"
 
+#define EVLIST_TIMEOUT	    0x01
+#define EVLIST_INSERTED	    0x02
+#define EVLIST_SIGNAL	    0x04
+#define EVLIST_ACTIVE	    0x08
+#define EVLIST_INTERNAL	    0x10
+#define EVLIST_ACTIVE_LATER 0x20
+#define EVLIST_FINALIZING   0x40
+#define EVLIST_INIT	        0x80
+
 struct event_callback {
 	struct {
 		struct event_callback* tqe_next;
