@@ -5,9 +5,13 @@
  *      Author: magic
  */
 
+#include <limits.h>
+
 #include "time_internal.h"
 #include "include/event2/util.h"
 #include "util_internal.h"
+
+#define MAX_SECONDS_IN_MSEC_LONG  (((LONG_MAX) - 999) / 1000)
 
 static void adjust_monotonic_time(struct evutil_monotonic_timer* base, struct timeval* tv)
 {
@@ -60,6 +64,14 @@ int evutil_gettime_monotonic_(struct evutil_monotonic_timer* base, struct timeva
 	return 0;
 }
 
+long evutil_tv_to_msec_(const struct timeval* tv)
+{
+	if (tv->tv_usec > 1000000 || tv->tv_sec > MAX_SECONDS_IN_MSEC_LONG) {
+		return -1;
+	}
+
+	return (tv->tv_sec * 1000) + ((tv->tv_usec + 999) / 1000);
+}
 
 
 

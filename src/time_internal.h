@@ -22,4 +22,6 @@ int evutil_gettime_monotonic_(struct evutil_monotonic_timer *mt, struct timeval 
 int evutil_make_internal_pipe_(evutil_socket_t fd[2]);
 evutil_socket_t evutil_eventfd_(unsigned initval, int flags);
 
+long evutil_tv_to_msec_(const struct timeval* tv);
+
 #endif /* SRC_TIME_INTERNAL_H_ */

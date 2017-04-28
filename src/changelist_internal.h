@@ -29,4 +29,6 @@ struct event_change {
 /* Set for adding edge-triggered events. */
 #define EV_CHANGE_ET      EV_ET
 
+void event_changelist_remove_all_(struct event_changelist* changelist, struct event_base* base);
+
 #endif /* SRC_CHANGELIST_INTERNAL_H_ */

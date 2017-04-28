@@ -99,4 +99,6 @@ int evmap_foreach_event_(struct event_base *base,
     event_base_foreach_event_cb fn,
     void *arg);
 
+void evmap_io_active_(struct event_base* base, evutil_socket_t fd, short events);
+
 #endif /* SRC_EVMAP_INTERNAL_H_ */

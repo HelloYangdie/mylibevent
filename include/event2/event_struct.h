@@ -87,4 +87,8 @@ struct event {
 	struct timeval ev_timeout;
 };
 
+struct event_dlist {
+	struct event* lh_first;
+};
+
 #endif /* INCLUDE_EVENT2_EVENT_STRUCT_H_ */

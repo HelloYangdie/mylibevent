@@ -217,6 +217,8 @@ struct event_base {
 	} once_events;
 };
 
+void event_active_nolock_(struct event *ev, int res, short count);
+
 #endif /* SRC_EVENT_INTERNAL_H_ */
 
 

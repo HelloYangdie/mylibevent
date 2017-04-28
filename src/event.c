@@ -280,7 +280,10 @@ struct event_config* event_config_new(void)
 	return cfg;
 }
 
+void event_active_nolock_(struct event *ev, int res, short ncalls)
+{
 
+}
 
 
 
