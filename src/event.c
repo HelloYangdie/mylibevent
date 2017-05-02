@@ -26,6 +26,9 @@ struct event_base *event_global_current_base_ = NULL;
 #define event_debug_assert_not_added_(ev) ((void)0)
 #define event_debug_note_setup_(ev)       ((void)0)
 
+#define DECR_EVENT_COUNT(base,flags) \
+	((base)->event_count -= (~((flags) >> 4) & 1))
+
 static void *event_self_cbarg_ptr_ = NULL;
 
 static void *(*mm_malloc_fn_)(size_t sz) = NULL;
@@ -107,6 +110,17 @@ void event_mm_free_(void *ptr)
 static const struct eventop* eventops[] = {
 
 };
+
+static void event_queue_remove_active_later(struct event_base* base, struct event_callback* evcb)
+{
+	if (EVUTIL_UNLIKELY(!(evcb->evcb_flags & EVLIST_ACTIVE_LATER))) {
+		event_log("%s: %p not on queue %x", __FUNCTION__, evcb, EVLIST_ACTIVE_LATER);
+		return;
+	}
+	DECR_EVENT_COUNT(base, evcb->evcb_flags);
+	evcb->evcb_flags &= ~EVLIST_ACTIVE_LATER;
+	base->event_count_active--;
+}
 
 int event_priority_set(struct event *ev, int pri)
 {
@@ -280,8 +294,58 @@ struct event_config* event_config_new(void)
 	return cfg;
 }
 
+int event_callback_activate_nolock_(struct event_base* base, struct event_callback* evcb)
+{
+	int r = 1;
+
+	if (evcb->evcb_flags & EVLIST_FINALIZING) return 0;
+
+	switch (evcb->evcb_flags & (EVLIST_ACTIVE | EVLIST_ACTIVE_LATER)) {
+	default:
+		EVUTIL_ASSERT(0);
+	case EVLIST_ACTIVE_LATER:
+
+	}
+}
+
 void event_active_nolock_(struct event *ev, int res, short ncalls)
 {
+	struct event_base* base;
+
+	base = ev->ev_base;
+
+	if (ev->ev_evcallback.evcb_flags == EVLIST_FINALIZING) return;
+
+	switch ( ev->ev_evcallback.evcb_flags & (EVLIST_ACTIVE | EVLIST_ACTIVE_LATER))
+	{
+	default:
+	case EVLIST_ACTIVE | EVLIST_ACTIVE_LATER:
+		EVUTIL_ASSERT(0);
+		break;
+	case EVLIST_ACTIVE:
+		ev->ev_res |= res;
+		return;
+	case EVLIST_ACTIVE_LATER:
+		ev->ev_res |= res;
+		break;
+	case 0:
+		ev->ev_res = res;
+		break;
+	}
+
+	if (ev->ev_evcallback.evcb_pri < base->event_running_priority) {
+		base->event_continue = 1;
+	}
+
+	if (ev->ev_events & EV_SIGNAL) {
+		if (base->current_event == event_to_event_callback(ev) &&
+			!EVBASE_IN_THREAD(base)) {
+			++base->current_event_waiters;
+			EVTHREAD_COND_WAIT(base->current_event_cond, base->th_base_lock);
+		}
+		ev->ev_.ev_signal.ev_ncalls = ncalls;
+		ev->ev_.ev_signal.ev_pncalls = NULL;
+	}
 
 }
 

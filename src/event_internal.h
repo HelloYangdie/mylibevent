@@ -219,6 +219,10 @@ struct event_base {
 
 void event_active_nolock_(struct event *ev, int res, short count);
 
+int event_callback_active_nolock_(struct event_base*, struct event_callback*);
+
+int event_callback_activate_nolock_(struct event_base *, struct event_callback *);
+
 #endif /* SRC_EVENT_INTERNAL_H_ */
 
 
