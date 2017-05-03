@@ -27,7 +27,7 @@ struct event_callback {
 	struct {
 		struct event_callback* tqe_next;
 		struct event_callback* tqe_pre;
-	}evcb_active_netx;
+	}evcb_active_next;
 	short evcb_flags;
 	uint8_t evcb_pri;
 	uint8_t evcb_closure;

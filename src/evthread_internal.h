@@ -36,6 +36,14 @@ extern unsigned long (*evthread_id_fn_)(void);
 #define EVTHREAD_COND_WAIT(cond, lock)	\
 	((cond) ? evthread_cond_fns_.wait_condition((cond), lock, NULL) : 0)
 
+/** Return true iff we need to notify the base's main thread about changes to
+ * its state, because it's currently running the main loop in another
+ * thread. Requires lock. */
+#define EVBASE_NEED_NOTIFY(base)			 \
+	(evthread_id_fn_ != NULL &&			 \
+	    (base)->running_loop &&			 \
+	    (base)->th_owner_id != evthread_id_fn_())
+
 #endif /* SRC_EVTHREAD_INTERNAL_H_ */
 
 

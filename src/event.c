@@ -14,6 +14,7 @@
 #include "event_internal.h"
 #include "include/event2/event.h"
 #include "evthread_internal.h"
+#include "queue.h"
 
 #define EVENT_BASE_ASSERT_LOCKED(base) EVLOCK_ASSERT_LOCKED((base)->th_base_lock)
 /* How often (in seconds) do we check for changes in wall clock time relative
@@ -26,8 +27,17 @@ struct event_base *event_global_current_base_ = NULL;
 #define event_debug_assert_not_added_(ev) ((void)0)
 #define event_debug_note_setup_(ev)       ((void)0)
 
+
+#define MAX(a,b) (((a)>(b))?(a):(b))
+#define MAX_EVENT_COUNT(var, v) var = MAX(var, v)
+
 #define DECR_EVENT_COUNT(base,flags) \
 	((base)->event_count -= (~((flags) >> 4) & 1))
+
+#define INCR_EVENT_COUNT(base,flags) do {					\
+	((base)->event_count += (~((flags) >> 4) & 1));				\
+	MAX_EVENT_COUNT((base)->event_count_max, (base)->event_count);		\
+} while (0)
 
 static void *event_self_cbarg_ptr_ = NULL;
 
@@ -36,6 +46,8 @@ static void *(*mm_realloc_fn_)(void *p, size_t sz) = NULL;
 static void (*mm_free_fn_)(void *p) = NULL;
 
 static int event_debug_mode_too_late = 1;
+
+extern const struct eventop epollops;
 
 void *event_mm_malloc_(size_t sz)
 {
@@ -108,8 +120,24 @@ void event_mm_free_(void *ptr)
 }
 
 static const struct eventop* eventops[] = {
-
+		epollops,
+		NULL
 };
+
+static struct event_callback* event_to_event_callback(struct event* ev)
+{
+	return &ev->ev_evcallback;
+}
+
+static int evthread_notify_base(struct event_base* base)
+{
+	if (!base->th_notify_fn) return -1;
+
+	if (base->is_notify_pending) return 0;
+
+	base->is_notify_pending = 1;
+	return base->th_notify_fn(base);
+}
 
 static void event_queue_remove_active_later(struct event_base* base, struct event_callback* evcb)
 {
@@ -120,6 +148,22 @@ static void event_queue_remove_active_later(struct event_base* base, struct even
 	DECR_EVENT_COUNT(base, evcb->evcb_flags);
 	evcb->evcb_flags &= ~EVLIST_ACTIVE_LATER;
 	base->event_count_active--;
+
+	TAILQ_REMOVE(&base->active_later_queue, evcb, evcb_active_next);
+}
+
+static void event_queue_insert_active(struct event_base* base, struct event_callback* evcb)
+{
+	if (evcb->evcb_flags & EVLIST_ACTIVE) {
+		return;
+	}
+
+	INCR_EVENT_COUNT(base, evcb->evcb_flags);
+
+	evcb->evcb_flags |= EVLIST_ACTIVE;
+	base->event_count_active++;
+	MAX_EVENT_COUNT(base->event_count_active_max, base->event_count_active);
+	TAILQ_INSERT_TAIL(&base->activequeues[evcb->evcb_pri], evcb, evcb_active_next);
 }
 
 int event_priority_set(struct event *ev, int pri)
@@ -205,13 +249,44 @@ static int gettime(struct event_base* base, struct timeval* tp)
 	return 0;
 }
 
+static void event_config_entry_free(struct event_config_entry *entry)
+{
+	if (entry->avoid_method != NULL)
+		mm_free((char *)entry->avoid_method);
+	mm_free(entry);
+}
+
+void event_config_free(struct event_config* cfg)
+{
+	struct event_config_entry* entry;
+	while ((entry = TAILQ_FIRST(&cfg->entries)) != NULL) {
+		TAILQ_REMOVE(&cfg->entries, entry, next);
+		event_config_entry_free(entry);
+	}
+	mm_free(cfg);
+}
+
 struct event_base* event_base_new(void)
 {
 	struct event_base* base = NULL;
 	struct event_config* cfg = event_config_new();
 	if (cfg) {
-		base =
+		base = event_base_new_with_config(cfg);
+		event_config_free(cfg);
 	}
+}
+
+static int event_config_is_avoid_method(const struct event_config* cfg, const char* method)
+{
+	struct event_config_entry* entry;
+	TAILQ_FOREACH(entry, &cfg->entries, next) {
+		if (entry->avoid_method != NULL &&
+			strcmp(entry->avoid_method, method) == 0) {
+			return 1;
+		}
+	}
+
+	return 0;
 }
 
 struct event_base* event_base_new_with_config(const struct event_config* cfg)
@@ -250,8 +325,8 @@ struct event_base* event_base_new_with_config(const struct event_config* cfg)
 	base->th_notify_fd[0] = -1;
 	base->th_notify_fd[1] = -1;
 
-	base->active_later_quue.tqh_first = NULL;
-	base->active_later_quue.tqh_last = &base->active_later_quue.tqh_first;
+	base->active_later_queue.tqh_first = NULL;
+	base->active_later_queue.tqh_last = &base->active_later_queue.tqh_first;
 
 	evmap_io_initmap_(&base->io);
 	evmap_signal_initmap_(&base->sigmap);
@@ -294,7 +369,7 @@ struct event_config* event_config_new(void)
 	return cfg;
 }
 
-int event_callback_activate_nolock_(struct event_base* base, struct event_callback* evcb)
+int event_callback_active_nolock_(struct event_base* base, struct event_callback* evcb)
 {
 	int r = 1;
 
@@ -304,8 +379,22 @@ int event_callback_activate_nolock_(struct event_base* base, struct event_callba
 	default:
 		EVUTIL_ASSERT(0);
 	case EVLIST_ACTIVE_LATER:
-
+		event_queue_remove_active_later(base, evcb);
+		r = 0;
+		break;
+	case EVLIST_ACTIVE:
+		return 0;
+	case 0:
+		break;
 	}
+
+	event_queue_insert_active(base, evcb);
+
+	if (EVBASE_NEED_NOTIFY(base)) {
+		evthread_notify_base(base);
+	}
+
+	return r;
 }
 
 void event_active_nolock_(struct event *ev, int res, short ncalls)
@@ -347,6 +436,7 @@ void event_active_nolock_(struct event *ev, int res, short ncalls)
 		ev->ev_.ev_signal.ev_pncalls = NULL;
 	}
 
+	event_callback_active_nolock_(base, event_to_event_callback(ev));
 }
 
 

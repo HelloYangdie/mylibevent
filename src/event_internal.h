@@ -11,6 +11,7 @@
 #include <time.h>
 
 #include "include/event2/event_struct.h"
+#include "queue.h"
 #include "evsignal_internal.h"
 #include "time_internal.h"
 #include "util_internal.h"
@@ -45,8 +46,10 @@ struct event_signal_map {
 };
 
 struct event_config_entry {
-	struct event_config_entry* tqe_next;
-	struct event_config_entry** tqe_prev;
+	struct {
+		struct event_config_entry* tqe_next;
+		struct event_config_entry** tqe_prev;
+	}next;
 
 	const char* avoid_method;
 };
@@ -155,7 +158,7 @@ struct event_base {
 	/** The length of the activequeues array */
 	int nactivequeues;
 
-	struct evcallback_list active_later_quue;
+	struct evcallback_list active_later_queue;
 
 	/** An array of common_timeout_list* for all of the common timeout values we know. */
 	struct common_timeout_list** common_timeout_queues;

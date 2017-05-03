@@ -95,6 +95,8 @@ struct event_config* event_config_new(void);
 
 struct event_base* event_base_new_with_config(const struct event_config*);
 
+void event_config_free(struct event_config* cfg);
+
 typedef int (*event_base_foreach_event_cb)(const struct event_base*, const struct event*, void*);
 typedef void (*event_callback_fn)(evutil_socket_t, short, void *);
 

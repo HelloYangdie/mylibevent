@@ -43,6 +43,7 @@ const struct eventop epollops = {
 	epoll_init,
 	epoll_nochangelist_add,
 	epoll_nochangelist_del,
+	epoll_dealloc
 };
 
 static void* epoll_init(struct event_base* base)
@@ -300,9 +301,36 @@ static int epoll_dispatch(struct event_base *base, struct timeval *tv)
 
 		evmap_io_active_(base, events[i].data.fd, ev | EV_ET);
 	}
+
+	if (res == epoll_op->nevents && epoll_op->nevents < MAX_NEVENT) {
+		/* We used all of the event space this time.  We should
+		 be ready for more events next time. */
+		int new_nevents = epoll_op->nevents * 2;
+		struct epoll_event *new_events;
+
+		new_events = mm_realloc(epoll_op->events,
+				new_nevents * sizeof(struct epoll_event));
+		if (new_events) {
+			epoll_op->events = new_events;
+			epoll_op->nevents = new_nevents;
+		}
+	}
+
+	return (0);
 }
 
+static void epoll_dealloc(struct event_base* base)
+{
+	struct epollop* epop = base->evbase;
+	if (epop->events) mm_free(epop->events);
 
+	if (epop->epfd >= 0) close(epop->epfd);
+
+	if (epop->timerfd >= 0) close(epop->timerfd);
+
+	memset(epop, 0, sizeof(struct epollop));
+	mm_free(epop);
+}
 
 
 
