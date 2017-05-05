@@ -14,7 +14,7 @@
 #include "event_internal.h"
 #include "include/event2/event.h"
 #include "evthread_internal.h"
-#include "queue.h"
+#include "queue_internal.h"
 
 #define EVENT_BASE_ASSERT_LOCKED(base) EVLOCK_ASSERT_LOCKED((base)->th_base_lock)
 /* How often (in seconds) do we check for changes in wall clock time relative
@@ -124,6 +124,16 @@ static const struct eventop* eventops[] = {
 		NULL
 };
 
+static void event_base_free_(struct event_base* base, int run_finalizers)
+{
+
+}
+
+void event_base_free(struct event_base *base)
+{
+	event_base_free_(base, 1);
+}
+
 static struct event_callback* event_to_event_callback(struct event* ev)
 {
 	return &ev->ev_evcallback;
@@ -137,6 +147,34 @@ static int evthread_notify_base(struct event_base* base)
 
 	base->is_notify_pending = 1;
 	return base->th_notify_fn(base);
+}
+
+static int evthread_notify_base_eventfd(struct event_base* base)
+{
+	uint64_t msg = 1;
+	int r = 0;
+
+	do {
+		r = write(base->th_notify_fd[0], (void* )msg, sizeof(msg));
+	} while (r < 0 && errno == EAGAIN);
+
+	return r < 0 ? -1 : 0;
+}
+
+static void evthread_notify_drain_eventfd(evutil_socket_t fd, short what, void* arg)
+{
+	uint64_t msg;
+	ssize_t r;
+	struct event_base* base = arg;
+
+	r = read(fd, (void*)&msg, sizeof(msg));
+	if (r < 0 && errno != EAGAIN) {
+		event_log(""Error reading from eventfd");
+	}
+
+	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
+	base->is_notify_pending = 0;
+	EVBASE_RELEASE_LOCK(base, th_base_lock);
 }
 
 static void event_queue_remove_active_later(struct event_base* base, struct event_callback* evcb)
@@ -276,7 +314,7 @@ struct event_base* event_base_new(void)
 	}
 }
 
-static int event_config_is_avoid_method(const struct event_config* cfg, const char* method)
+static int event_config_is_avoided_method(const struct event_config* cfg, const char* method)
 {
 	struct event_config_entry* entry;
 	TAILQ_FOREACH(entry, &cfg->entries, next) {
@@ -287,6 +325,60 @@ static int event_config_is_avoid_method(const struct event_config* cfg, const ch
 	}
 
 	return 0;
+}
+
+static int evthread_make_base_notifiable_nolock_(struct event_base *base)
+{
+	void (*cb)(evutil_socket_t, short, void*);
+	int (*notify)(struct event_base*);
+
+	if (base->th_notify_fn != NULL) return 0;
+
+	base->th_notify_fd[0] = evutil_eventfd_(0, EVUTIL_EFD_CLOEXEC|EVUTIL_EFD_NONBLOCK);
+	if (base->th_notify_fd[0] >= 0) {
+		base->th_notify_fd[1] = -1;
+		notify = evthread_notify_base_eventfd;
+		cb = evthread_notify_drain_eventfd;
+	}
+}
+
+int event_base_priority_init(struct event_base* base, int npriorities)
+{
+	int i;
+
+	if (base->event_count_active || npriorities < 1 || npriorities >= EVENT_MAX_PRIORITIES) {
+		return -1;
+	}
+
+	if (npriorities == base->nactivequeues) return -1;
+
+	if (base->nactivequeues) {
+		mm_free(base->activequeues);
+		base->nactivequeues = 0;
+	}
+
+	base->activequeues = (struct evcallback_list* )mm_calloc(npriorities, sizeof(struct evcallback_list));
+	if (base->activequeues == NULL) {
+		event_log("%s calloc failed", __FUNCTION__);
+		return -1;
+	}
+	base->nactivequeues = npriorities;
+
+	for (i = 0; i < base->nactivequeues; i++) {
+		TAILQ_INIT(base->activequeues[i]);
+	}
+
+	return 0;
+}
+
+int evthread_make_base_notifiable(struct event_base* base)
+{
+	int r;
+	if (!base) return -1;
+	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
+	r = evthread_make_base_notifiable_nolock_(base);
+	EVBASE_RELEASE_LOCK(base, th_base_lock);
+	return r;
 }
 
 struct event_base* event_base_new_with_config(const struct event_config* cfg)
@@ -352,6 +444,37 @@ struct event_base* event_base_new_with_config(const struct event_config* cfg)
 		base->limit_callbacks_after_prio = INT_MAX;
 	}
 
+	for (i = 0; eventops[i] != NULL && base->evbase == NULL; i++) {
+		if (cfg != NULL) {
+			if (event_config_is_avoided_method(cfg, eventops[i]->name)) {
+				continue;
+			}
+
+			if ((eventops[i]->features & cfg->require_features) != cfg->require_features) {
+				continue;
+			}
+		}
+
+		base->evsel = eventops[i];
+		base->evbase = base->evsel->init(base);
+	}
+
+	if (base->evbase == NULL) {
+		base->evsel = NULL;
+		event_base_free(base);
+		return NULL;
+	}
+
+	if (event_base_priority_init(base, 1) < 0) {
+		event_base_free(base);
+		return NULL;
+	}
+
+	if (evthread_lock_fns_.lock != NULL && (!cfg || (!cfg->flags & EVENT_BASE_FLAG_NOLOCK))) {
+		 EVTHREAD_ALLOC_LOCK(base->th_base_lock, 0);
+		 EVTHREAD_ALLOC_COND(base->current_event_cond);
+
+	}
 }
 
 struct event_config* event_config_new(void)

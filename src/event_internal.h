@@ -11,11 +11,11 @@
 #include <time.h>
 
 #include "include/event2/event_struct.h"
-#include "queue.h"
 #include "evsignal_internal.h"
 #include "time_internal.h"
 #include "util_internal.h"
 #include "minheap_internal.h"
+#include "queue_internal.h"
 
 /** @name Event closure codes
     Possible values for evcb_closure in struct event_callback
@@ -40,11 +40,6 @@
 
 #define event_io_map event_signal_map
 
-struct event_signal_map {
-	void** entries;
-	int nentries;
-};
-
 struct event_config_entry {
 	struct {
 		struct event_config_entry* tqe_next;
@@ -54,6 +49,10 @@ struct event_config_entry {
 	const char* avoid_method;
 };
 
+struct event_signal_map {
+	void** entries;
+	int nentries;
+};
 /** Internal structure: describes the configuration we want for an event_base
  * that we're about to allocate. */
 struct event_config {

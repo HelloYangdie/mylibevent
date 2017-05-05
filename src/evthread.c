@@ -23,6 +23,10 @@ struct evthread_condition_callbacks evthread_cond_fns_ = {
 	0, NULL, NULL, NULL, NULL
 };
 
+struct evthread_lock_callbacks evthread_lock_fns_ = {
+		0, 0, NULL, NULL, NULL, NULL
+};
+
 int evthreadimpl_is_lock_debugging_enabled_(void)
 {
 	return evthreadimpl_is_lock_debugging_enabled_;

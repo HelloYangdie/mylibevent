@@ -55,6 +55,9 @@
  **/
 #define EV_CLOSED	0x80
 
+
+#define EVENT_MAX_PRIORITIES 256
+
 enum event_method_feature {
 	/** Require an event method that allows edge-triggered events with EV_ET. */
 	EV_FEATURE_ET = 0X01,
@@ -103,6 +106,10 @@ typedef void (*event_callback_fn)(evutil_socket_t, short, void *);
 int event_assign(struct event *, struct event_base *, evutil_socket_t, short, event_callback_fn, void *);
 
 int	event_priority_set(struct event *, int);
+
+void event_base_free(struct event_base *);
+
+int event_base_priority_init(struct event_base* ,int);
 
 #endif /* INCLUDE_EVENT2_EVENT_H_ */
 

@@ -49,7 +49,9 @@ int evutil_make_socket_closeonexec(evutil_socket_t sock);
 
 int evutil_make_socket_nonblocking(evutil_socket_t sock);
 
+int evutil_make_socket_nonblocking(evutil_socket_t sock);
 
+int evutil_closesocket(evutil_socket_t sock);
 #endif /* INCLUDE_EVENT2_UTIL_H_ */
 
 

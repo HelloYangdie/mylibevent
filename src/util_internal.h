@@ -33,6 +33,11 @@ struct evutil_weakrand_state {
 
 const char *evutil_getenv_(const char *name);
 
+evutil_socket_t evutil_eventfd_(unsigned initval, int flags);
+
+#define EVUTIL_EFD_CLOEXEC EFD_CLOEXEC
+#define EVUTIL_EFD_NONBLOCK EFD_NONBLOCK
+
 #endif /* SRC_UTIL_INTERNAL_H_ */
 
 
